@@ -23,7 +23,10 @@ defmodule Honeydew.Mixfile do
   end
 
   defp deps do
-    []
+    [
+      {:ex_doc, ">= 0.0.0", only: :dev},
+      {:gen_stage, ">= 0.5.0"}
+    ]
   end
 
   defp package do

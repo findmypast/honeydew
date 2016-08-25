@@ -1,21 +1,30 @@
+alias Experimental.GenStage
+
 defmodule Honeydew.Supervisor do
 
-  def start_link(pool_name, worker_module, worker_init_args, pool_opts \\ []) do
+  def start_link(pool, worker, args, pool_opts) do
     import Supervisor.Spec
 
-    max_failures       = pool_opts[:max_failures] || 3
-    failure_delay_secs = pool_opts[:failure_delay_secs] || 30
+    queue      = pool_opts[:queue] || Honeydew.Queue.ErlangQueue
+    queue_args = Keyword.get(pool_opts, :queue_args, [])
+    dispatcher = pool_opts[:dispatcher] || GenStage.DemandDispatcher
 
-    num_workers     = pool_opts[:workers] || 10
+    failure_mode = pool_opts[:failure_mode] || Honeydew.FailureMode.Abandon
+
+    num_queues  = pool_opts[:num_queues] || 1
+    num_workers = pool_opts[:num_workers] || 10
+
     init_retry_secs = pool_opts[:init_retry_secs] || 5
 
-    work_queue = Honeydew.work_queue_name(worker_module, pool_name)
+    pool |> Honeydew.queue_group  |> :pg2.create
+    pool |> Honeydew.worker_group |> :pg2.create
 
     children = [
-      worker(Honeydew.WorkQueue, [work_queue, max_failures, failure_delay_secs], id: :work_queue),
-      supervisor(Honeydew.WorkerSupervisor, [pool_name, worker_module, worker_init_args, init_retry_secs, num_workers], id: :worker_supervisor)
+      supervisor(Honeydew.WorkerSupervisor, [pool, worker, args, num_workers, init_retry_secs, failure_mode], id: :worker_supervisor),
+      supervisor(Honeydew.QueueSupervisor,  [pool, queue, queue_args, num_queues, dispatcher], id: :queue_supervisor)
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one)
   end
+
 end
