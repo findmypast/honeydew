@@ -1,11 +1,10 @@
 defmodule Honeydew.QueueSupervisor do
-  alias Honeydew.Queue
 
   def start_link(pool, module, args, num_queues, dispatcher) do
     import Supervisor.Spec
 
     children = [
-      worker(Queue, [pool, module, args, dispatcher])
+      worker(module, [pool, args, dispatcher])
     ]
 
     opts = [strategy: :simple_one_for_one,
@@ -20,7 +19,7 @@ defmodule Honeydew.QueueSupervisor do
 
     # start up workers
     Enum.each(1..num_queues, fn _ ->
-      Supervisor.start_child(supervisor, [])
+      {:ok, _} = Supervisor.start_child(supervisor, [])
     end)
 
     {:ok, supervisor}

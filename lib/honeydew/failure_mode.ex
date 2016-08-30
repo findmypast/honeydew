@@ -4,5 +4,5 @@ defmodule Honeydew.FailureMode do
   @type job :: %Job{}
   @type queue :: any
 
-  @callback handle_failure(atom, job) :: queue
+  @callback handle_failure(atom, job, list) :: queue
 end

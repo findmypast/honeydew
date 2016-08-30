@@ -1,11 +1,11 @@
 defmodule Honeydew.WorkerSupervisor do
   alias Honeydew.WorkerMonitor
 
-  def start_link(pool, module, args, num_workers, init_retry_secs, failure_mode) do
+  def start_link(pool, module, args, num_workers, init_retry_secs, failure_mode, failure_mode_args) do
     import Supervisor.Spec
 
     children = [
-      worker(WorkerMonitor, [pool, module, args, init_retry_secs, failure_mode], restart: :transient)
+      worker(WorkerMonitor, [pool, module, args, init_retry_secs, failure_mode, failure_mode_args], restart: :transient)
     ]
 
     opts = [strategy: :simple_one_for_one,

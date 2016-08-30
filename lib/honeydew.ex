@@ -1,4 +1,30 @@
+alias Experimental.GenStage
+
 defmodule Honeydew do
+  alias Honeydew.Job
+
+  defmacro __using__(_opts) do
+    quote do
+      def cast(pool, task) do
+        pool
+        |> Honeydew.queue_group
+        |> :pg2.get_closest_pid
+        |> GenStage.cast({:enqueue, unquote(__MODULE__).build_job(task)})
+      end
+
+      def call(pool, task) do
+        pool
+        |> Honeydew.queue_group
+        |> :pg2.get_closest_pid
+        |> GenStage.call({:enqueue, unquote(__MODULE__).build_job(task)})
+      end
+    end
+  end
+
+  def build_job(task) do
+    %Job{task: task}
+  end
+
   @doc """
   Creates a supervision spec for a pool.
 
@@ -11,6 +37,7 @@ defmodule Honeydew do
   - `queue_args` are arguments handed to your queue module's `init/1`
   - `dispatcher` the job dispatching strategy, must implement the `GenStage.Dispatcher` behaviour
   - `failure_mode` is the module that handles job failures, it must implement the `Honeydew.FailureMode` behaviour
+  - `failure_mde_args` are arguments handed to your failure mode module's `handle_failure/3`
   - `num_queues`: the number of queue processes in the pool
   - `num_workers`: the number of workers in the pool
   - `init_retry_secs`: the amount of time, in seconds, to wait before respawning a worker who's `init/1` function failed
@@ -40,6 +67,18 @@ defmodule Honeydew do
   @doc false
   def queue_supervisor(pool) do
     name(pool, "queue_supervisor")
+  end
+
+  @doc false
+  def create_groups(pool) do
+    pool |> queue_group  |> :pg2.create
+    pool |> worker_group |> :pg2.create
+  end
+
+  @doc false
+  def delete_groups(pool) do
+    pool |> queue_group  |> :pg2.delete
+    pool |> worker_group |> :pg2.delete
   end
 
   defp name(pool, component) do
