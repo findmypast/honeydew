@@ -18,7 +18,8 @@ defmodule Honeydew.Worker do
   end
 
   def handle_events([%Job{task: task, from: from} = job], _from, %State{pool: pool, module: module, user_state: user_state, monitor: monitor} = state) do
-    IO.puts "worker got #{inspect task}"
+    :ok = GenServer.call(monitor, {:working_on, job})
+
     result =
       case task do
         f when is_function(f) -> f.(user_state)
@@ -30,7 +31,7 @@ defmodule Honeydew.Worker do
     |> Honeydew.get_queue
     |> GenStage.cast({:ack, %{job | result: result}})
 
-    GenStage.cast(monitor, :ack)
+    :ok = GenServer.call(monitor, :ack)
 
     # reply if we're connected to the calling node
     with {pid, _ref} <- from,
@@ -38,6 +39,14 @@ defmodule Honeydew.Worker do
          node(pid) in nodes,
          true = Process.alive?(pid),
       do: GenStage.reply(from, result)
+
+    {:noreply, [], state}
+  end
+
+  def handle_cast(:subscribe_to_queues, %State{pool: pool} = state) do
+    pool
+    |> Honeydew.get_all_queues
+    |> Enum.each(&GenStage.async_subscribe(self, to: &1, max_demand: 1, min_demand: 0, cancel: :temporary))
 
     {:noreply, [], state}
   end

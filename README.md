@@ -120,7 +120,7 @@ In general, a job goes through the following steps from inception to completion:
 - The queue process will enqueue the job, then, depending on its current "demand", take one of the following actions:
   - If there is outstanding demand (> 0), the queue will dispatch the job immediately to a waiting worker according to the selected dispatch strategy.
   - If there is no outstanding demand, the job will remain in the queue until demand arrives. (On nodes with zero workers (enqueue-only), demand will never arrive)
-- The queue "reserves" the job (marks it as in-progress), and it's sent to a "Worker Monitor". The worker monitor remembers the job, then passes it to the worker itself.
+- The queue "reserves" the job (marks it as in-progress), and it's sent to the worker. The worker asks its Worker Monitor to remember the job, then executes the task.
 - If the worker crashes, the worker monitor executes the selected "Failure Mode" and terminates.
   - The failure mode most likely sends a "negative acknowledgement (nack)" to the queue, which may allow another worker to try the job, or move it to a "failed" queue.
 - If the job succeeds, the worker sends acknowledgement ("ack") messages to both the queue and the worker monitor.
