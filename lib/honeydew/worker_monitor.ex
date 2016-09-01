@@ -53,6 +53,6 @@ defmodule Honeydew.WorkerMonitor do
   end
 
   def terminate(_reason, %State{pool: pool, job: job, failure_mode: failure_mode, failure_mode_args: failure_mode_args}) do
-    Task.start(fn -> failure_mode.handle_failure(pool, job, failure_mode_args) end)
+    failure_mode.handle_failure(pool, job, failure_mode_args)
   end
 end
