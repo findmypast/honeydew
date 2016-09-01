@@ -1,8 +1,5 @@
 defmodule Honeydew.FailureMode do
   alias Honeydew.Job
 
-  @type job :: %Job{}
-  @type queue :: any
-
-  @callback handle_failure(atom, job, list) :: queue
+  @callback handle_failure(pool :: atom, job :: %Job{}, queue :: atom, args :: list) :: any
 end

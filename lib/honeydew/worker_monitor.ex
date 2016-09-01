@@ -16,9 +16,12 @@ defmodule Honeydew.WorkerMonitor do
     GenStage.start_link(Honeydew.Worker, [pool, module, args, self])
     |> case do
          {:ok, worker} ->
-           # Process.monitor(worker)
            Process.flag(:trap_exit, true)
-           pool |> Honeydew.worker_group |> :pg2.join(self)
+
+           pool
+           |> Honeydew.worker_group
+           |> :pg2.join(self)
+
            GenStage.cast(self, :subscribe_to_queues)
            {:producer_consumer, %State{pool: pool, worker: worker, failure_mode: failure_mode, failure_mode_args: failure_mode_args}}
          {:error, error} ->
@@ -37,16 +40,15 @@ defmodule Honeydew.WorkerMonitor do
     GenStage.sync_subscribe(worker, to: self, max_demand: 1, min_demand: 0)
 
     pool
-    |> Honeydew.queue_group
-    |> :pg2.get_local_members
+    |> Honeydew.get_all_queues
     |> Enum.each(&GenStage.async_subscribe(self, to: &1, max_demand: 1, min_demand: 0, cancel: :temporary))
 
     {:noreply, [], state}
   end
 
-  # when a job is successful, the worker sends us a message to clear our job state (if we were to die while
-  # holding that state, but the job had since been successfully processed, we'd run the failure mode's callback)
-  def handle_cast(:job_done, state) do
+  # when a job is successful, the worker sends us a message to clear our job state (if we were to die while holding
+  # that state, but the job had since been successfully processed, we'd run the failure mode's callback. that's bad.)
+  def handle_cast(:ack, state) do
     {:noreply, [], %{state | job: nil}}
   end
 

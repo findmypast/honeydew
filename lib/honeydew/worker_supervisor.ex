@@ -15,12 +15,15 @@ defmodule Honeydew.WorkerSupervisor do
 
     {:ok, supervisor} = Supervisor.start_link(children, opts)
 
-    # start up workers
-    Enum.each(1..num_workers, fn _ ->
-      Supervisor.start_child(supervisor, [])
-    end)
+    start_child(supervisor, num_workers)
 
     {:ok, supervisor}
+  end
+
+  defp start_child(_supervisor, 0), do: :noop
+  defp start_child(supervisor, num) do
+    Supervisor.start_child(supervisor, [])
+    start_child(supervisor, num-1)
   end
 
 end

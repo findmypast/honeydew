@@ -26,7 +26,7 @@ defmodule Honeydew.Supervisor do
       supervisor(Honeydew.QueueSupervisor,  [pool, queue, queue_args, num_queues, dispatcher], id: :queue_supervisor)
     ]
 
-    Supervisor.start_link(children, strategy: :one_for_one)
+    Supervisor.start_link(children, strategy: :one_for_one, name: Honeydew.root_supervisor(pool))
   end
 
 end

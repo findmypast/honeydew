@@ -18,6 +18,7 @@ defmodule Honeydew.Worker do
   end
 
   def handle_events([%Job{task: task, from: from} = job], _from, %State{pool: pool, module: module, user_state: user_state, monitor: monitor} = state) do
+    IO.puts "worker got #{inspect task}"
     result =
       case task do
         f when is_function(f) -> f.(user_state)
@@ -26,16 +27,16 @@ defmodule Honeydew.Worker do
       end
 
     pool
-    |> Honeydew.queue_group
-    |> :pg2.get_closest_pid
+    |> Honeydew.get_queue
     |> GenStage.cast({:ack, %{job | result: result}})
 
-    GenStage.cast(monitor, :job_done)
+    GenStage.cast(monitor, :ack)
 
     # reply if we're connected to the calling node
     with {pid, _ref} <- from,
          nodes = [node | :erlang.nodes],
          node(pid) in nodes,
+         true = Process.alive?(pid),
       do: GenStage.reply(from, result)
 
     {:noreply, [], state}

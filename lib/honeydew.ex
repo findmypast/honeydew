@@ -7,15 +7,13 @@ defmodule Honeydew do
     quote do
       def cast(pool, task) do
         pool
-        |> Honeydew.queue_group
-        |> :pg2.get_closest_pid
+        |> Honeydew.get_queue
         |> GenStage.cast({:enqueue, unquote(__MODULE__).build_job(task)})
       end
 
       def call(pool, task) do
         pool
-        |> Honeydew.queue_group
-        |> :pg2.get_closest_pid
+        |> Honeydew.get_queue
         |> GenStage.call({:enqueue, unquote(__MODULE__).build_job(task)})
       end
     end
@@ -60,6 +58,11 @@ defmodule Honeydew do
   end
 
   @doc false
+  def root_supervisor(pool) do
+    name(pool, "root_supervisor")
+  end
+
+  @doc false
   def worker_supervisor(pool) do
     name(pool, "worker_supervisor")
   end
@@ -68,6 +71,7 @@ defmodule Honeydew do
   def queue_supervisor(pool) do
     name(pool, "queue_supervisor")
   end
+
 
   @doc false
   def create_groups(pool) do
@@ -81,7 +85,49 @@ defmodule Honeydew do
     pool |> worker_group |> :pg2.delete
   end
 
-  defp name(pool, component) do
-    ["honeydew", component, pool] |> Enum.join(".") |> String.to_atom
+  @doc false
+  def get_all_workers({:global, _name} = pool) do
+    pool |> worker_group |> :pg2.get_members
   end
+
+  @doc false
+  def get_all_workers(pool) do
+    pool |> worker_group |> :pg2.get_local_members
+  end
+
+  @doc false
+  def get_all_queues({:global, _name} = pool) do
+    pool |> queue_group |> :pg2.get_members
+  end
+
+  @doc false
+  def get_all_queues(pool) do
+    pool |> queue_group |> :pg2.get_local_members
+  end
+
+  @doc false
+  def get_queue({:global, _name} = pool) do
+    pool |> queue_group |> :pg2.get_closest_pid
+  end
+
+  @doc false
+  def get_queue(pool) do
+    pool
+    |> queue_group
+    |> :pg2.get_local_members
+    |> case do
+         [] -> nil
+         members -> Enum.random(members)
+       end
+  end
+
+
+  defp name({:global, pool}, component) do
+    name([:global, pool], component)
+  end
+
+  defp name(pool, component) do
+    ["honeydew", component, pool] |> List.flatten |> Enum.join(".") |> String.to_atom
+  end
+
 end

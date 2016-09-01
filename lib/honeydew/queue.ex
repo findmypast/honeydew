@@ -1,23 +1,20 @@
 alias Experimental.GenStage
 
 defmodule Honeydew.Queue do
-  # a job is an MFA or a function + metadata
-  # @type job :: %Job{}
-  # @type private :: any
-
-  # @callback init(list) :: private
-  # @callback enqueue(private, job) :: private
-  # # reserving jobs should not remove them from the queue
-  # # the queue should only remove jobs once they are successful
-  # @callback reserve(private, integer) :: {private, [job] | []}
-  # # it's ok to remove the job from the queue
-  # @callback ack(private, job) :: private
-  # # it's not ok to remove the job from the queue
-  # @callback nack(private, job) :: private
+  alias Honeydew.Job
 
   defmodule State do
     defstruct pool: nil, private: nil, outstanding: 0
   end
+
+  @callback handle_demand(demand :: pos_integer, state :: %State{outstanding: 0}) :: {:noreply, [%Job{}] | [], %State{}}
+  @callback handle_cast({:enqueue, job :: %Job{}}, state :: %State{outstanding: 0})            :: {:noreply, [], %State{}}
+  @callback handle_cast({:enqueue, job :: %Job{}}, state :: %State{outstanding: pos_integer})  :: {:noreply, [%Job{}] | [], %State{}}
+  @callback handle_call({:enqueue, job :: %Job{}}, from :: {pid, reference}, state :: %State{}) :: {:noreply, [%Job{}] | [], %State{}}
+  @callback handle_cast({:ack,  job :: %Job{}}, state :: %State{})                     :: {:noreply, [], %State{}}
+  @callback handle_cast({:nack, job :: %Job{}, requeue :: boolean}, state :: %State{}) :: {:noreply, [], %State{}}
+  @optional_callbacks handle_call: 3
+
 
   defmacro __using__(_opts) do
     quote do
@@ -33,7 +30,9 @@ defmodule Honeydew.Queue do
       # ensures that our init is what is matched by GenStage.start_link/2
       # is this naughty? the alternative might be a :proc_lib.start_link and a :gen_server.enter_loop
       def init([:"$honeydew", pool, module, args, dispatcher]) do
-        pool |> Honeydew.queue_group |> :pg2.join(self)
+        pool
+        |> Honeydew.queue_group
+        |> :pg2.join(self)
 
         GenStage.cast(self, :subscribe_workers)
 
@@ -45,8 +44,7 @@ defmodule Honeydew.Queue do
 
       def handle_cast(:subscribe_workers, %State{pool: pool} = state) do
         pool
-        |> Honeydew.worker_group
-        |> :pg2.get_local_members
+        |> Honeydew.get_all_workers
         |> Enum.each(&GenStage.async_subscribe(&1, to: self, max_demand: 1, min_demand: 0, cancel: :temporary))
 
         {:noreply, [], state}
@@ -54,6 +52,7 @@ defmodule Honeydew.Queue do
 
       # demand arrived, but we still have unsatisfied demand
       def handle_demand(demand, %State{outstanding: outstanding} = state) when demand > 0 and outstanding > 0 do
+        IO.puts "got #{demand} demand, outstanding now: #{outstanding + demand}"
         {:noreply, [], %{state | outstanding: outstanding + demand}}
       end
 
