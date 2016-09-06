@@ -52,7 +52,6 @@ defmodule Honeydew.Queue do
 
       # demand arrived, but we still have unsatisfied demand
       def handle_demand(demand, %State{outstanding: outstanding} = state) when demand > 0 and outstanding > 0 do
-        IO.puts "got #{demand} demand, outstanding now: #{outstanding + demand}"
         {:noreply, [], %{state | outstanding: outstanding + demand}}
       end
 

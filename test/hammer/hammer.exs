@@ -1,4 +1,4 @@
-defmodule Honeydew.Hammer do
+defmodule Worker do
   use Honeydew
 
   def init(args) do
@@ -13,28 +13,43 @@ end
 
 defmodule Honeydew.Hammer do
 
-  @num_jobs 50_000
+  @num_jobs 1_000_000
 
-  def run(sync) do
-    {microsecs, :ok} = :timer.tc(__MODULE__, sync, [])
-    IO.puts("processed #{@num_jobs} in #{microsecs/:math.pow(10, 6)}s")
+  def run(func) do
+    children = [
+      Honeydew.child_spec("pool", Worker, [], num_workers: 10)
+    ]
+
+    Supervisor.start_link(children, strategy: :one_for_one)
+
+    {microsecs, :ok} = :timer.tc(__MODULE__, func, [])
+    secs = microsecs/:math.pow(10, 6)
+    IO.puts("processed #{@num_jobs} in #{secs}s -> #{@num_jobs/secs} per sec")
   end
 
-  def async do
+  def call do
     Enum.map(0..@num_jobs, fn _ ->
       Task.async(fn ->
-        :hi = Honeydew.HammerHoney.call({:echo, [:hi]})
+        :hi = Worker.call("pool", {:echo, [:hi]})
       end)
     end)
-    |> Enum.each(fn task -> Task.await(task, :infinity) end)
+    |> Enum.each(&Task.await(&1, :infinity))
   end
 
-  def send_sync do
-    Enum.each(0..@num_jobs, fn _ ->
-      Riemann.send(@event)
+  def cast do
+    Enum.map(0..@num_jobs, fn _ ->
+      Task.async(fn ->
+        Worker.cast("pool", {:echo, [:hi]})
+      end)
     end)
-  end
 
+    me = self
+    Worker.cast("pool", fn _ -> send me, :done end)
+
+    receive do
+      :done -> :ok
+    end
+  end
 end
 
-Honeydew.Hammer.run(:async)
+Honeydew.Hammer.run(:cast)

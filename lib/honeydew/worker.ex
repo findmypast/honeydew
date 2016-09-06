@@ -9,22 +9,33 @@ defmodule Honeydew.Worker do
   end
 
   def init([pool, module, args, monitor]) do
-    try do
-      {:ok, user_state} = apply(module, :init, [args])
-      {:consumer, %State{pool: pool, module: module, user_state: user_state, monitor: monitor}}
-    rescue e ->
-      {:error, e}
-    end
+    {:ok, user_state} =
+      if module.__info__(:functions) |> Enum.member?({:init, 1}) do
+        try do
+          {:state, apply(module, :init, [args])}
+        rescue e ->
+            {:error, e}
+        end
+      else
+        {:ok, :no_state}
+      end
+    {:consumer, %State{pool: pool, module: module, user_state: user_state, monitor: monitor}}
   end
 
   def handle_events([%Job{task: task, from: from} = job], _from, %State{pool: pool, module: module, user_state: user_state, monitor: monitor} = state) do
     :ok = GenServer.call(monitor, {:working_on, job})
 
+    user_state_args =
+      case user_state do
+        {:state, s} -> [s]
+        :no_state   -> []
+      end
+
     result =
       case task do
-        f when is_function(f) -> f.(user_state)
-        f when is_atom(f)     -> apply(module, f, [user_state])
-        {f, a}                -> apply(module, f, a ++ [user_state])
+        f when is_function(f) -> apply(f, user_state_args)
+        f when is_atom(f)     -> apply(module, f, user_state_args)
+        {f, a}                -> apply(module, f, a ++ user_state_args)
       end
 
     pool

@@ -36,11 +36,9 @@ defmodule Honeydew.Queue.RabbitMQ do
   def handle_demand(demand, %State{private: %PState{channel: channel, name: name} = queue, outstanding: 0} = state) when demand > 0 do
     case Basic.get(channel, name) do
       {:empty, _meta} ->
-        IO.puts "got demand #{demand} with zero outstanding, empty queue, subscribing"
         {:ok, consumer_tag} = Basic.consume(channel, name)
         {:noreply, [], %{state | private: %{queue | consumer_tag: consumer_tag}, outstanding: 1}}
       {:ok, payload, meta} ->
-        IO.puts "got demand #{demand} with zero outstanding, successful poll"
         job = %{:erlang.binary_to_term(payload) | private: meta}
         {:noreply, [job], state}
     end
@@ -64,19 +62,16 @@ defmodule Honeydew.Queue.RabbitMQ do
   end
 
   def handle_info({:basic_deliver, _payload, %{delivery_tag: delivery_tag}}, %State{private: %PState{channel: channel}, outstanding: 0} = state) do
-    IO.puts "got delivery with zero outstanding demand, rejecting"
     Basic.reject(channel, delivery_tag, redeliver: true)
     {:noreply, [], state}
   end
 
   def handle_info({:basic_deliver, payload, meta}, %State{private: %PState{channel: channel, consumer_tag: consumer_tag}, outstanding: 1} = state) do
-    IO.puts "dispatching to last worker, canceling subscription"
     Basic.cancel(channel, consumer_tag)
     dispatch(payload, meta, state)
   end
 
   def handle_info({:basic_deliver, payload, meta}, %State{outstanding: outstanding} = state) do
-    IO.puts "got delivery: #{inspect :erlang.binary_to_term(payload)}, outstanding now: #{outstanding - 1}"
     dispatch(payload, meta, state)
   end
 
