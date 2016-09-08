@@ -42,17 +42,17 @@ defmodule Honeydew.WorkerMonitor do
     {:reply, :ok, %{state | job: nil}}
   end
 
-  def handle_info({:EXIT, worker, _reason}, %State{pool: pool, worker: worker, job: job} = state) do
+  def handle_info({:EXIT, worker, reason}, %State{pool: pool, worker: worker, job: job} = state) do
     Logger.debug "Worker #{inspect worker} from pool #{pool} died while working on #{inspect job}"
 
-    {:stop, :worker_died, state}
+    {:stop, {:worker_died, reason}, state}
   end
 
   def terminate(_reason, %State{job: nil}) do
     :ok
   end
 
-  def terminate(_reason, %State{pool: pool, job: job, failure_mode: failure_mode, failure_mode_args: failure_mode_args}) do
-    failure_mode.handle_failure(pool, job, failure_mode_args)
+  def terminate(reason, %State{pool: pool, job: job, failure_mode: failure_mode, failure_mode_args: failure_mode_args}) do
+    failure_mode.handle_failure(pool, job, reason, failure_mode_args)
   end
 end

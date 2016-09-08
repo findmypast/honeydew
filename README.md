@@ -239,6 +239,12 @@ Honeydew.Supervisor
 - failover/takeover for global queues
 - `call/2` responses for RabbitMQ?
 - durable local queues using dets?
+- pause/resume
+- statistics
+- before/after job callbacks in worker module
+- fix failure modes
+- `await/2` and job cancellation support?
+- `yield_many/2` support?
 
 ### Acknowledgements
 

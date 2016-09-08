@@ -18,6 +18,10 @@ defmodule Honeydew.Queue.ErlangQueue do
 
   # Enqueuing
 
+  def handle_cast({:enqueue, job}, %State{private: queue, suspended: true} = state) do
+    {:noreply, [], %{state | private: enqueue(queue, job)}}
+  end
+
   # there's no demand outstanding, queue the task.
   def handle_cast({:enqueue, job}, %State{private: queue, outstanding: 0} = state) do
     {:noreply, [], %{state | private: enqueue(queue, job)}}
@@ -33,12 +37,13 @@ defmodule Honeydew.Queue.ErlangQueue do
     {:noreply, jobs, %{state | private: queue, outstanding: outstanding - Enum.count(jobs)}}
   end
 
-  def handle_call({:enqueue, job}, from, state) do
-    handle_cast({:enqueue, %{job | from: from}}, state)
+  def handle_cast(:resume, %State{private: queue, outstanding: outstanding} = state) do
+    {queue, jobs} = reserve(queue, outstanding)
+
+    {:noreply, jobs, %{state | private: queue, outstanding: outstanding - Enum.count(jobs)}}
   end
 
-
-  def handle_cast({:ack, %Job{private: {id, _}}}, %State{private: {pending, in_progress}} = state) do
+  def handle_cast({:ack, %Job{private: id}}, %State{private: {pending, in_progress}} = state) do
     {:noreply, [], %{state | private: {pending, Map.delete(in_progress, id)}}}
   end
 
@@ -48,9 +53,7 @@ defmodule Honeydew.Queue.ErlangQueue do
   end
 
   # requeue
-  def handle_cast({:nack, %Job{private: {id, nacks}} = job, true}, %State{private: {pending, in_progress}}) do
-    job = %{job | private: {id, nacks + 1}}
-
+  def handle_cast({:nack, %Job{private: id} = job, true}, %State{private: {pending, in_progress}}) do
     handle_cast({:enqueue, job}, %State{private: {pending, Map.delete(in_progress, id)}})
   end
 
@@ -69,7 +72,7 @@ defmodule Honeydew.Queue.ErlangQueue do
     case :queue.out(pending) do
       {:empty, _pending} -> {queue, jobs}
       {{:value, job}, pending} ->
-        job = %{job | private: {:erlang.unique_integer, 0}}
+        job = %{job | private: :erlang.unique_integer}
         do_reserve([job | jobs], {pending, Map.put(in_progress, job.private, job)}, num - 1)
     end
   end

@@ -12,7 +12,8 @@ defmodule Honeydew.Worker do
     {:ok, user_state} =
       if module.__info__(:functions) |> Enum.member?({:init, 1}) do
         try do
-          {:state, apply(module, :init, [args])}
+          {:ok, state} = apply(module, :init, [args])
+          {:ok, {:state, state}}
         rescue e ->
             {:error, e}
         end
@@ -38,18 +39,19 @@ defmodule Honeydew.Worker do
         {f, a}                -> apply(module, f, a ++ user_state_args)
       end
 
+    job = %{job | result: {:ok, result}}
+
     pool
     |> Honeydew.get_queue
-    |> GenStage.cast({:ack, %{job | result: result}})
+    |> GenStage.cast({:ack, job})
 
     :ok = GenServer.call(monitor, :ack)
 
-    # reply if we're connected to the calling node
-    with {pid, _ref} <- from,
-         nodes = [node | :erlang.nodes],
-         node(pid) in nodes,
-         true = Process.alive?(pid),
-      do: GenStage.reply(from, result)
+    # is this bad? if we're in a cluster of nodes and a job comes in via
+    # a queue with an owner pid that happens to be alive in the local cluster,
+    # sending it a message it's not expecting might crash it.
+    with {owner, _ref} <- from,
+      do: send(owner, job)
 
     {:noreply, [], state}
   end

@@ -2,25 +2,73 @@ alias Experimental.GenStage
 
 defmodule Honeydew do
   alias Honeydew.Job
+  #
+  # Parts of this module were lovingly stolen from
+  # https://github.com/elixir-lang/elixir/blob/v1.3.2/lib/elixir/lib/task.ex#L320
+  #
 
   defmacro __using__(_opts) do
     quote do
-      def cast(pool, task) do
-        pool
-        |> Honeydew.get_queue
-        |> GenStage.cast({:enqueue, unquote(__MODULE__).build_job(task)})
+      def cast(task, pool) do
+        %Job{task: task}
+        |> unquote(__MODULE__).enqueue(pool)
+
+        :ok
       end
 
-      def call(pool, task) do
+      def async(task, pool) do
+        %Job{task: task, from: {self, make_ref}}
+        |> unquote(__MODULE__).enqueue(pool)
+      end
+
+      def yield(job, timeout \\ 5000)
+
+      def yield(%Job{from: {owner, _}} = job, _) when owner != self do
+        raise ArgumentError, unquote(__MODULE__).invalid_owner_error(job)
+      end
+
+      def yield(%Job{from: {_, ref}}, timeout) do
+        receive do
+          %Job{from: {_, ^ref}, result: result} ->
+            result # may be {:ok, term} or {:exit, term}
+        after
+          timeout ->
+            nil
+        end
+      end
+
+      def suspend(pool) do
         pool
-        |> Honeydew.get_queue
-        |> GenStage.call({:enqueue, unquote(__MODULE__).build_job(task)})
+        |> unquote(__MODULE__).get_all_queues
+        |> Enum.each(&GenStage.cast(&1, :"$honeydew.suspend"))
+      end
+
+      def resume(pool) do
+        pool
+        |> unquote(__MODULE__).get_all_queues
+        |> Enum.each(&GenStage.cast(&1, :"$honeydew.resume"))
+      end
+
+      # FIXME: remove
+      def state(pool) do
+        pool
+        |> unquote(__MODULE__).get_all_queues
+        |> Enum.map(&GenStage.call(&1, :"$honeydew.state"))
       end
     end
   end
 
-  def build_job(task) do
-    %Job{task: task}
+  @doc false
+  def enqueue(job, pool) do
+    :ok = pool
+          |> Honeydew.get_queue
+          |> GenStage.cast({:enqueue, job})
+    job
+  end
+
+  @doc false
+  def invalid_owner_error(job) do
+    "job #{inspect job} must be queried from the owner but was queried from #{inspect self}"
   end
 
   @doc """

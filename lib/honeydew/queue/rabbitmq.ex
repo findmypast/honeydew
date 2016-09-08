@@ -71,7 +71,7 @@ defmodule Honeydew.Queue.RabbitMQ do
     dispatch(payload, meta, state)
   end
 
-  def handle_info({:basic_deliver, payload, meta}, %State{outstanding: outstanding} = state) do
+  def handle_info({:basic_deliver, payload, meta}, state) do
     dispatch(payload, meta, state)
   end
 
@@ -84,21 +84,6 @@ defmodule Honeydew.Queue.RabbitMQ do
     job = %{:erlang.binary_to_term(payload) | private: meta}
     {:noreply, [job], %{state | outstanding: outstanding - 1}}
   end
-
-  # defp reserve(state, num) do
-  #   do_reserve([], state, num)
-  # end
-
-  # defp do_reserve(jobs, state, 0), do: jobs
-
-  # defp do_reserve(jobs, state, num) do
-  #   case Basic.get(state.channel, state.name) do
-  #     {:empty, _meta} -> jobs
-  #     {:ok, payload, meta} ->
-  #       job = %{:erlang.binary_to_term(payload) | private: meta}
-  #       do_reserve([job | jobs], state, num - 1)
-  #   end
-  # end
 
   defp ack(%PState{channel: channel}, %Job{private: %{delivery_tag: tag}}) do
     Basic.ack(channel, tag)
