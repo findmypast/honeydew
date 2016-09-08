@@ -58,6 +58,9 @@ defmodule Honeydew.Queue do
       # ignore
       def handle_cast(:"$honeydew.suspend", %State{suspended: true} = state), do: {:noreply, [], state}
       def handle_cast(:"$honeydew.suspend", state) do
+        # handle_suspend function instead?
+        GenStage.cast(self, :suspend)
+
         {:noreply, [], %{state | suspended: true}}
       end
 

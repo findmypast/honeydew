@@ -30,18 +30,12 @@ defmodule Honeydew.Queue.RabbitMQ do
   # GenStage Callbacks
 
   #
-  # Start consuming events when we receive demand after all outstanding demand has been satisfied.
+  # After all outstanding demand has been satisfied, Start consuming events when we receive demand
   # This is also our initial state when the queue process starts up.
   #
-  def handle_demand(demand, %State{private: %PState{channel: channel, name: name} = queue, outstanding: 0} = state) when demand > 0 do
-    case Basic.get(channel, name) do
-      {:empty, _meta} ->
-        {:ok, consumer_tag} = Basic.consume(channel, name)
-        {:noreply, [], %{state | private: %{queue | consumer_tag: consumer_tag}, outstanding: 1}}
-      {:ok, payload, meta} ->
-        job = %{:erlang.binary_to_term(payload) | private: meta}
-        {:noreply, [job], state}
-    end
+  def handle_demand(demand, %State{private: queue, outstanding: 0} = state) when demand > 0 do
+    {queue, jobs} = reserve_or_subscribe(queue, demand)
+    {:noreply, jobs, %{state | private: queue, outstanding: demand - Enum.count(jobs)}}
   end
 
   # Enqueuing
@@ -61,20 +55,41 @@ defmodule Honeydew.Queue.RabbitMQ do
     {:noreply, [], state}
   end
 
+  def handle_cast(:suspend, %State{private: %PState{consumer_tag: consumer_tag}} = state) when is_nil(consumer_tag) do
+    {:noreply, [], state}
+  end
+
+  def handle_cast(:suspend, %State{private: %PState{channel: channel, consumer_tag: consumer_tag} = queue} = state) do
+    Basic.cancel(channel, consumer_tag)
+
+    {:noreply, [], %{state | private: %{queue | consumer_tag: nil}}}
+  end
+
+  def handle_cast(:resume, %State{private: queue, outstanding: outstanding} = state) do
+    {queue, jobs} = reserve_or_subscribe(queue, outstanding)
+    {:noreply, jobs, %{state | private: queue, outstanding: outstanding - Enum.count(jobs)}}
+  end
+
+
   def handle_info({:basic_deliver, _payload, %{delivery_tag: delivery_tag}}, %State{private: %PState{channel: channel}, outstanding: 0} = state) do
     Basic.reject(channel, delivery_tag, redeliver: true)
     {:noreply, [], state}
   end
 
-  def handle_info({:basic_deliver, payload, meta}, %State{private: %PState{channel: channel, consumer_tag: consumer_tag}, outstanding: 1} = state) do
+  def handle_info({:basic_deliver, _payload, meta}, %State{private: queue, suspended: true} = state) do
+    nack(queue, meta)
+    {:noreply, [], state}
+  end
+
+  def handle_info({:basic_deliver, payload, meta}, %State{private: %PState{channel: channel, consumer_tag: consumer_tag} = queue, outstanding: 1} = state) do
     Basic.cancel(channel, consumer_tag)
+    state = %{state | private: %{queue | consumer_tag: nil}}
     dispatch(payload, meta, state)
   end
 
   def handle_info({:basic_deliver, payload, meta}, state) do
     dispatch(payload, meta, state)
   end
-
 
   def handle_info({:basic_consume_ok, _meta}, state), do: {:noreply, [], state}
   def handle_info({:basic_cancel, _meta}, state), do: {:stop, :normal, state}
@@ -89,7 +104,26 @@ defmodule Honeydew.Queue.RabbitMQ do
     Basic.ack(channel, tag)
   end
 
-  defp nack(%PState{channel: channel}, %Job{private: %{delivery_tag: tag}}) do
+  defp nack(queue, %Job{private: meta}) do
+    nack(queue, meta)
+  end
+
+  defp nack(%PState{channel: channel}, %{delivery_tag: tag}) do
     Basic.reject(channel, tag, redeliver: true)
+  end
+
+  defp reserve_or_subscribe(queue, num), do: do_reserve_or_subscribe([], queue, num)
+
+  defp do_reserve_or_subscribe(jobs, queue, 0), do: {queue, jobs}
+
+  defp do_reserve_or_subscribe(jobs, %PState{channel: channel, name: name} = queue, num) do
+    case Basic.get(channel, name) do
+      {:empty, _meta} ->
+        {:ok, consumer_tag} = Basic.consume(channel, name)
+        {%{queue | consumer_tag: consumer_tag}, jobs}
+      {:ok, payload, meta} ->
+        job = %{:erlang.binary_to_term(payload) | private: meta}
+        do_reserve_or_subscribe([job | jobs], queue, num - 1)
+    end
   end
 end
