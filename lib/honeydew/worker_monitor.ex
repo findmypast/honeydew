@@ -2,6 +2,7 @@ alias Experimental.GenStage
 
 defmodule Honeydew.WorkerMonitor do
   use GenServer
+  alias Honeydew.Job
   require Logger
 
   defmodule State do
@@ -13,10 +14,13 @@ defmodule Honeydew.WorkerMonitor do
   end
 
   def init([pool, module, args, init_retry_secs, failure_mode, failure_mode_args]) do
-    GenStage.start_link(Honeydew.Worker, [pool, module, args, self])
+    Process.flag(:trap_exit, true)
+
+    has_init = module.__info__(:functions) |> Enum.member?({:init, 1})
+    GenStage.start(Honeydew.Worker, [pool, module, args, self, has_init])
     |> case do
          {:ok, worker} ->
-           Process.flag(:trap_exit, true)
+           Process.link(worker)
 
            pool
            |> Honeydew.group(:workers)
@@ -28,9 +32,8 @@ defmodule Honeydew.WorkerMonitor do
 
            GenStage.cast(worker, :subscribe_to_queues)
            {:ok, %State{pool: pool, worker: worker, failure_mode: failure_mode, failure_mode_args: failure_mode_args}}
-         {:error, error} ->
+         {:error, _} ->
            :timer.apply_after(init_retry_secs * 1000, Supervisor, :start_child, [Honeydew.worker_supervisor(pool), []])
-           Logger.warn("#{module}.init/1 must return {:ok, state}, got: #{inspect(error)}, retrying in #{init_retry_secs}s")
            :ignore
         end
   end
@@ -54,8 +57,8 @@ defmodule Honeydew.WorkerMonitor do
     {:reply, :ok, %{state | job: nil}}
   end
 
-  def handle_info({:EXIT, worker, reason}, %State{pool: pool, worker: worker, job: job} = state) do
-    Logger.debug "Worker #{inspect worker} from pool #{pool} died while working on #{inspect job}"
+  def handle_info({:EXIT, worker, reason}, %State{pool: pool, worker: worker, job: %Job{} = job} = state)do
+    Logger.info "Worker #{inspect worker} from pool #{pool} died while working on #{inspect job}"
 
     {:stop, {:worker_died, reason}, state}
   end

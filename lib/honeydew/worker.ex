@@ -3,24 +3,28 @@ alias Experimental.GenStage
 defmodule Honeydew.Worker do
   use GenStage
   alias Honeydew.Job
+  require Logger
 
   defmodule State do
     defstruct [:pool, :module, :user_state, :monitor]
   end
 
-  def init([pool, module, args, monitor]) do
-    {:ok, user_state} =
-      if module.__info__(:functions) |> Enum.member?({:init, 1}) do
-        try do
-          {:ok, state} = apply(module, :init, [args])
-          {:ok, {:state, state}}
-        rescue e ->
-            {:error, e}
-        end
-      else
-        {:ok, :no_state}
+  def init([pool, module, _args, monitor, false]) do
+    {:consumer, %State{pool: pool, module: module, user_state: :no_state, monitor: monitor}}
+  end
+
+  def init([pool, module, args, monitor, true]) do
+    try do
+      case apply(module, :init, [args]) do
+        {:ok, state} ->
+          {:consumer, %State{pool: pool, module: module, user_state: {:state, state}, monitor: monitor}}
+        bad ->
+          Logger.warn("#{module}.init/1 must return {:ok, state}, got: #{inspect(bad)}, retrying...")
+          {:error, bad}
       end
-    {:consumer, %State{pool: pool, module: module, user_state: user_state, monitor: monitor}}
+    rescue e ->
+        {:error, e}
+    end
   end
 
   def handle_events([%Job{task: task, from: from} = job], _from, %State{pool: pool, module: module, user_state: user_state, monitor: monitor} = state) do

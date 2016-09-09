@@ -4,11 +4,11 @@ defmodule Riak do
   @moduledoc """
     This is an example Worker to interface with Riak.
     You'll need to add the erlang riak driver to your mix.exs:
-      `{:riakc, github: "basho/riak-erlang-client"}`
+    `{:riakc, ">= 2.4.1}`
   """
 
-  def init({ip, port}) do
-    :riakc_pb_socket.start_link(ip, port)
+  def init([ip, port]) do
+    :riakc_pb_socket.start_link(ip, port) # returns {:ok, riak}
   end
 
   def up?(riak) do
@@ -16,7 +16,7 @@ defmodule Riak do
   end
 
   def put(bucket, key, obj, content_type, riak) do
-    :riakc_pb_socket.put(riak, :riakc_obj.new(bucket, key, obj, content_type))
+    :ok = :riakc_pb_socket.put(riak, :riakc_obj.new(bucket, key, obj, content_type))
   end
 
   def get(bucket, key, riak) do
@@ -25,5 +25,15 @@ defmodule Riak do
       {:error, :notfound} -> nil
       error -> error
     end
+  end
+end
+
+defmodule App do
+  def start do
+    children = [
+      Honeydew.child_spec(:my_pool, Riak, ['127.0.0.1', 8087], num_workers: 5, init_retry_secs: 10)
+    ]
+
+    Supervisor.start_link(children, strategy: :one_for_one)
   end
 end

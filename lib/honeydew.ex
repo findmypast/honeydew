@@ -9,14 +9,15 @@ defmodule Honeydew do
 
   defmacro __using__(_opts) do
     quote do
-      def cast(task, pool) do
+      def async(task, pool, opts \\ [])
+      def async(task, pool, reply: false) do
         %Job{task: task}
         |> unquote(__MODULE__).enqueue(pool)
 
         :ok
       end
 
-      def async(task, pool) do
+      def async(task, pool, _opts) do
         %Job{task: task, from: {self, make_ref}}
         |> unquote(__MODULE__).enqueue(pool)
       end
