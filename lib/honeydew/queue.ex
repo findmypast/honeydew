@@ -1,7 +1,6 @@
 alias Experimental.GenStage
 
 defmodule Honeydew.Queue do
-  alias Honeydew.Job
 
   defmodule State do
     defstruct pool: nil,
@@ -26,19 +25,20 @@ defmodule Honeydew.Queue do
       # @behaviour Honeydew.Queue
 
       def start_link(pool, args, dispatcher) do
-        GenStage.start_link(__MODULE__, [:"$honeydew", pool, __MODULE__, args, dispatcher])
+        GenStage.start_link(__MODULE__, {pool, __MODULE__, args, dispatcher})
       end
 
-      # the module that `use`s this module also has an init(list) function, the :"$honeydew" argument
-      # ensures that our init is what is matched by GenStage.start_link/2
-      # is this naughty? the alternative might be a :proc_lib.start_link and a :gen_server.enter_loop
-      def init([:"$honeydew", pool, module, args, dispatcher]) do
+      #
+      # the worker module also has an init/1 that's called with a list, so we use a tuple
+      # to ensure we match this one.
+      #
+      def init({pool, module, args, dispatcher}) do
         pool
-        |> Honeydew.queue_group
+        |> Honeydew.group(:queues)
         |> :pg2.join(self)
 
         pool
-        |> Honeydew.get_all_workers
+        |> Honeydew.get_all_members(:workers)
         |> Enum.each(&GenStage.async_subscribe(&1, to: self, max_demand: 1, min_demand: 0, cancel: :temporary))
 
         {:ok, state} = module.init(args)
@@ -46,7 +46,6 @@ defmodule Honeydew.Queue do
         {:producer, %State{pool: pool, private: state}, dispatcher: dispatcher}
       end
 
-      # ignore
       def handle_cast(:"$honeydew.resume", %State{suspended: false} = state), do: {:noreply, [], state}
       def handle_cast(:"$honeydew.resume", %State{pool: pool} = state) do
         # handle_resume function instead?
@@ -55,7 +54,6 @@ defmodule Honeydew.Queue do
         {:noreply, [], %{state | suspended: false}}
       end
 
-      # ignore
       def handle_cast(:"$honeydew.suspend", %State{suspended: true} = state), do: {:noreply, [], state}
       def handle_cast(:"$honeydew.suspend", state) do
         # handle_suspend function instead?
@@ -64,6 +62,7 @@ defmodule Honeydew.Queue do
         {:noreply, [], %{state | suspended: true}}
       end
 
+      # demand arrived while queue is suspended
       def handle_demand(demand, %State{suspended: true, outstanding: outstanding} = state) do
         {:noreply, [], %{state | outstanding: outstanding + demand}}
       end
@@ -71,6 +70,15 @@ defmodule Honeydew.Queue do
       # demand arrived, but we still have unsatisfied demand
       def handle_demand(demand, %State{outstanding: outstanding} = state) when demand > 0 and outstanding > 0 do
         {:noreply, [], %{state | outstanding: outstanding + demand}}
+      end
+
+      def handle_call(:"$honeydew.status", _from, %State{private: queue, suspended: suspended} = state) do
+        status =
+          queue
+          |> status
+          |> Map.put(:suspended, suspended)
+
+        {:reply, status, [], state}
       end
 
       # debugging

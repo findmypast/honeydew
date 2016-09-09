@@ -60,6 +60,10 @@ defmodule Honeydew.Queue.ErlangQueue do
 
   # Helpers
 
+  def status({pending, _}) do
+    %{count: :queue.len(pending)}
+  end
+
   defp enqueue({pending, in_progress}, job) do
     {:queue.in(job, pending), in_progress}
   end

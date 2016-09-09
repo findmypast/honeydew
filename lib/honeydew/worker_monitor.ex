@@ -19,8 +19,12 @@ defmodule Honeydew.WorkerMonitor do
            Process.flag(:trap_exit, true)
 
            pool
-           |> Honeydew.worker_group
+           |> Honeydew.group(:workers)
            |> :pg2.join(worker)
+
+           pool
+           |> Honeydew.group(:worker_monitors)
+           |> :pg2.join(self)
 
            GenStage.cast(worker, :subscribe_to_queues)
            {:ok, %State{pool: pool, worker: worker, failure_mode: failure_mode, failure_mode_args: failure_mode_args}}
@@ -34,6 +38,14 @@ defmodule Honeydew.WorkerMonitor do
   def handle_call({:working_on, job}, _from, state) do
     job = %{job | by: node}
     {:reply, :ok, %{state | job: job}}
+  end
+
+  def handle_call(:current_job, _from, %State{job: nil} = state) do
+    {:reply, nil, state}
+  end
+
+  def handle_call(:current_job, _from, %State{job: job} = state) do
+    {:reply, job, state}
   end
 
   # when a job is successful, the worker sends us a message to clear our job state (if we were to die while holding

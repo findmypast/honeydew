@@ -36,33 +36,50 @@ defmodule Honeydew do
             nil
         end
       end
-
-      def suspend(pool) do
-        pool
-        |> unquote(__MODULE__).get_all_queues
-        |> Enum.each(&GenStage.cast(&1, :"$honeydew.suspend"))
-      end
-
-      def resume(pool) do
-        pool
-        |> unquote(__MODULE__).get_all_queues
-        |> Enum.each(&GenStage.cast(&1, :"$honeydew.resume"))
-      end
-
-      # FIXME: remove
-      def state(pool) do
-        pool
-        |> unquote(__MODULE__).get_all_queues
-        |> Enum.map(&GenStage.call(&1, :"$honeydew.state"))
-      end
     end
+  end
+
+  def suspend(pool) do
+    pool
+    |> get_all_members(:queues)
+    |> Enum.each(&GenStage.cast(&1, :"$honeydew.suspend"))
+  end
+
+  def resume(pool) do
+    pool
+    |> get_all_members(:queues)
+    |> Enum.each(&GenStage.cast(&1, :"$honeydew.resume"))
+  end
+
+  def status(pool) do
+    queue_status =
+      pool
+      |> get_queue
+      |> GenStage.call(:"$honeydew.status")
+
+    jobs =
+      pool
+      |> get_all_members(:worker_monitors)
+      |> Enum.map(&GenServer.call(&1, :current_job))
+
+    %{queue: queue_status,
+      workers: %{total: Enum.count(jobs),
+                 busy: jobs |> Enum.filter(&(&1)) |> Enum.count}}
+  end
+
+  # FIXME: remove
+  def state(pool) do
+    pool
+    |> get_all_members(:queues)
+    |> Enum.map(&GenStage.call(&1, :"$honeydew.state"))
   end
 
   @doc false
   def enqueue(job, pool) do
-    :ok = pool
-          |> Honeydew.get_queue
-          |> GenStage.cast({:enqueue, job})
+    :ok =
+      pool
+      |> get_queue
+      |> GenStage.cast({:enqueue, job})
     job
   end
 
@@ -95,15 +112,18 @@ defmodule Honeydew do
     Supervisor.Spec.supervisor(Honeydew.Supervisor, [pool, worker, args, pool_opts], id: :root_supervisor)
   end
 
-  @doc false
-  def worker_group(pool) do
-    name(pool, "workers")
-  end
 
-  @doc false
-  def queue_group(pool) do
-    name(pool, "queues")
-  end
+  @groups [
+    :workers,
+    :worker_monitors,
+    :queues,
+  ]
+
+  Enum.each(@groups, fn group ->
+    def group(pool, unquote(group)) do
+      name(pool, unquote(group))
+    end
+  end)
 
   @doc false
   def root_supervisor(pool) do
@@ -120,48 +140,40 @@ defmodule Honeydew do
     name(pool, "queue_supervisor")
   end
 
-
   @doc false
   def create_groups(pool) do
-    pool |> queue_group  |> :pg2.create
-    pool |> worker_group |> :pg2.create
+    Enum.each(@groups, fn name ->
+      pool |> group(name) |> :pg2.create
+    end)
   end
 
   @doc false
   def delete_groups(pool) do
-    pool |> queue_group  |> :pg2.delete
-    pool |> worker_group |> :pg2.delete
+    Enum.each(@groups, fn name ->
+      pool |> group(name) |> :pg2.delete
+    end)
   end
 
   @doc false
-  def get_all_workers({:global, _name} = pool) do
-    pool |> worker_group |> :pg2.get_members
+  def get_all_members({:global, _} = pool, name) do
+    pool |> group(name) |> :pg2.get_members
   end
 
   @doc false
-  def get_all_workers(pool) do
-    pool |> worker_group |> :pg2.get_local_members
+  def get_all_members(pool, name) do
+    pool |> group(name) |> :pg2.get_local_members
   end
 
-  @doc false
-  def get_all_queues({:global, _name} = pool) do
-    pool |> queue_group |> :pg2.get_members
-  end
-
-  @doc false
-  def get_all_queues(pool) do
-    pool |> queue_group |> :pg2.get_local_members
-  end
 
   @doc false
   def get_queue({:global, _name} = pool) do
-    pool |> queue_group |> :pg2.get_closest_pid
+    pool |> group(:queues) |> :pg2.get_closest_pid
   end
 
   @doc false
   def get_queue(pool) do
     pool
-    |> queue_group
+    |> group(:queues)
     |> :pg2.get_local_members
     |> case do
          [] -> nil

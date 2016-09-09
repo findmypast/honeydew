@@ -59,7 +59,8 @@ defmodule Honeydew.Queue.RabbitMQ do
     {:noreply, [], state}
   end
 
-  def handle_cast(:suspend, %State{private: %PState{channel: channel, consumer_tag: consumer_tag} = queue} = state) do
+  def handle_cast(:suspend, %State{private: %PState{channel: channel,
+                                                    consumer_tag: consumer_tag} = queue} = state) do
     Basic.cancel(channel, consumer_tag)
 
     {:noreply, [], %{state | private: %{queue | consumer_tag: nil}}}
@@ -81,7 +82,8 @@ defmodule Honeydew.Queue.RabbitMQ do
     {:noreply, [], state}
   end
 
-  def handle_info({:basic_deliver, payload, meta}, %State{private: %PState{channel: channel, consumer_tag: consumer_tag} = queue, outstanding: 1} = state) do
+  def handle_info({:basic_deliver, payload, meta}, %State{private: %PState{channel: channel,
+                                                                           consumer_tag: consumer_tag} = queue, outstanding: 1} = state) do
     Basic.cancel(channel, consumer_tag)
     state = %{state | private: %{queue | consumer_tag: nil}}
     dispatch(payload, meta, state)
@@ -94,6 +96,12 @@ defmodule Honeydew.Queue.RabbitMQ do
   def handle_info({:basic_consume_ok, _meta}, state), do: {:noreply, [], state}
   def handle_info({:basic_cancel, _meta}, state), do: {:stop, :normal, state}
   def handle_info({:basic_cancel_ok, _meta}, state), do: {:noreply, [], state}
+
+
+  def status(%PState{channel: channel, name: name, consumer_tag: consumer_tag}) do
+    %{count: Queue.message_count(channel, name),
+      subscribed: consumer_tag != nil}
+  end
 
   defp dispatch(payload, meta, %State{outstanding: outstanding} = state) do
     job = %{:erlang.binary_to_term(payload) | private: meta}

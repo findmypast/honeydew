@@ -58,7 +58,7 @@ defmodule Honeydew.Worker do
 
   def handle_cast(:subscribe_to_queues, %State{pool: pool} = state) do
     pool
-    |> Honeydew.get_all_queues
+    |> Honeydew.get_all_members(:queues)
     |> Enum.each(&GenStage.async_subscribe(self, to: &1, max_demand: 1, min_demand: 0, cancel: :temporary))
 
     {:noreply, [], state}
