@@ -56,7 +56,7 @@ defmodule Honeydew do
     queue_status =
       pool
       |> get_queue
-      |> GenStage.call(:"$honeydew.status")
+      |> GenStage.call(:status)
 
     jobs =
       pool
@@ -66,6 +66,12 @@ defmodule Honeydew do
     %{queue: queue_status,
       workers: %{total: Enum.count(jobs),
                  busy: jobs |> Enum.filter(&(&1)) |> Enum.count}}
+  end
+
+  def filter(pool, function) do
+    pool
+    |> get_queue
+    |> GenStage.call({:filter, function})
   end
 
   # FIXME: remove

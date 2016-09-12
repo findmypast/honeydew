@@ -57,6 +57,19 @@ defmodule Honeydew.Queue.ErlangQueue do
     handle_cast({:enqueue, job}, %State{private: {pending, Map.delete(in_progress, id)}})
   end
 
+  def handle_call({:filter, function}, _from, %State{private: {pending, in_progress}} = state) do
+    # try to prevent user code crashing the queue
+    reply =
+      try do
+        jobs = (function |> :queue.filter(pending) |> :queue.to_list) ++
+               (in_progress |> Map.values |> Enum.filter(function))
+        {:ok, jobs}
+      rescue e ->
+          {:error, e}
+      end
+    {:reply, reply, [], state}
+  end
+
 
   # Helpers
 

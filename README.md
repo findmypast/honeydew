@@ -14,6 +14,21 @@ Honeydew attempts to provide "at least once" job execution, it's possible that c
 
 Honeydew isn't intended as a simple resource pool, the user's code isn't executed in the requesting process. Though you may use it as such, there are likely other alternatives that would fit your situation better.
 
+
+### tl;dr
+- Check out the [examples](https://github.com/koudelka/honeydew/tree/gen_stage/examples).
+- Enqueue and receive responses with `async/2` and `yield/1`.
+- Suspend and resume with `Honeydew.suspend/1` and `Honeydew.resume/1`
+- Queue status with `Honeydew.status/1`
+- List jobs with `Honeydew.filter/2`
+
+### Queue Feature Support
+|             | yield              | suspend/resume | filter | status |
+|-------------|--------------------|----------------|--------|:------:|
+| ErlangQueue | ✅                  | ✅              | ✅      | ✅      |
+| RabbitMQ    | if-nodes-connected | per-node       | ❌      | ✅      |
+
+
 ## Getting Started
 
 In your mix.exs file:
@@ -23,8 +38,6 @@ defp deps do
   [{:honeydew, " ~> 0.0.11"}]
 end
 ```
-
-Check out the [examples](https://github.com/koudelka/honeydew/tree/gen_stage/examples).
 
 ### Local Queue Example
 
@@ -194,6 +207,7 @@ You can suspend a queue (halt the distribution of new jobs to workers), by calli
 `Honeydew.child_spec/4`'s last argument is a keyword list of pool options.
 
 See the [Honeydew](https://github.com/koudelka/honeydew/blob/master/lib/honeydew.ex) module for the possible options.
+
 
 ## The Dungeon
 

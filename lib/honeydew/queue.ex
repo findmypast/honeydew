@@ -72,7 +72,7 @@ defmodule Honeydew.Queue do
         {:noreply, [], %{state | outstanding: outstanding + demand}}
       end
 
-      def handle_call(:"$honeydew.status", _from, %State{private: queue, suspended: suspended} = state) do
+      def handle_call(:status, _from, %State{private: queue, suspended: suspended} = state) do
         status =
           queue
           |> status
