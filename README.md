@@ -185,6 +185,10 @@ To start a global queue, pass a `{:global, name}` tuple when you start your supe
 
 There's one important caveat that you should note, Honeydew doesn't yet support OTP failover/takeover, so please don't use global queues in production yet. I'll send you three emoji of your choice if you submit a PR. :)
 
+### Suspend and Resume
+
+You can suspend a queue (halt the distribution of new jobs to workers), by calling `Honeydew.suspend(:your_pool)`, then resume with `Honeydew.resume(:your_pool)`. Note that this only instructs queues on the local node to stop distributing new jobs, if you're running a `:global` queue, it will suspend the queue on all nodes.
+
 ### Pool Options
 
 `Honeydew.child_spec/4`'s last argument is a keyword list of pool options.
