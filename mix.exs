@@ -1,11 +1,9 @@
 defmodule Honeydew.Mixfile do
   use Mix.Project
 
-  @version "0.0.11"
-
   def project do
     [app: :honeydew,
-     version: @version,
+     version: "0.1.0",
      elixir: "~> 1.3.0",
      deps: deps,
      package: package,

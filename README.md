@@ -5,7 +5,7 @@ Honeydew (["Honey, do!"](http://en.wiktionary.org/wiki/honey_do_list)) is a plug
 
 - Workers are permanent and hold immutable state.
 - Workers pull jobs from the queue in a demand-driven fashion.
-- Queues can exist locally, on another node in the cluster, or on a remote queue server (rabbitmq, redis, etc...).
+- Queues can exist locally, on another node in the cluster, or on a remote queue server (rabbitmq, etc...).
 - Jobs are executed using `async/2` and you can receive replies with `yield/1`, somewhat like [Task](http://elixir-lang.org/docs/stable/elixir/Task.html).
 - If a worker crashes while processing a job, the job is recovered and a "failure mode" (abandon, requeue, etc) is executed.
 - Queues, workers, dispatch strategies and failure modes are all plugable with user modules.
@@ -27,7 +27,7 @@ Honeydew isn't intended as a simple resource pool, the user's code isn't execute
 |             | yield         | suspend        | filter | status | cancel | disk-backed |
 |-------------|---------------|----------------|--------|:------:|:------:|:-----------:|
 | ErlangQueue | ✅            | ✅             | ✅*    | ✅    | ✅*    | ❌          |
-| RabbitMQ    | ⚠️<sup>2</sup>| ⚠️<sup>3</sup> | ❌     | ✅    | ❌     | ✅          |
+| RabbitMQ    | ⚠️<sup>1</sup>| ⚠️<sup>2</sup> | ❌     | ✅    | ❌     | ✅          |
 - * careful with this, it's slow, O(n)
 - <sup>1</sup> the node that calls `async` and the worker node must be in the same distributed erlang cluster
 - <sup>2</sup> no control commands are sent over the queue, you must call `suspend/1` on each node.
@@ -39,7 +39,7 @@ In your mix.exs file:
 
 ```elixir
 defp deps do
-  [{:honeydew, " ~> 0.0.11"}]
+  [{:honeydew, "~> 0.1.0"}]
 end
 ```
 
