@@ -19,15 +19,18 @@ Honeydew isn't intended as a simple resource pool, the user's code isn't execute
 - Check out the [examples](https://github.com/koudelka/honeydew/tree/gen_stage/examples).
 - Enqueue and receive responses with `async/2` and `yield/1`.
 - Suspend and resume with `Honeydew.suspend/1` and `Honeydew.resume/1`
-- Queue status with `Honeydew.status/1`
 - List jobs with `Honeydew.filter/2`
+- Queue status with `Honeydew.status/1`
 - Cancel jobs with `Honeydew.cancel/2`
 
 ### Queue Feature Support
-|             | yield              | suspend/resume | filter | status | cancel |
-|-------------|--------------------|----------------|--------|:------:|:-------:
-| ErlangQueue | ✅                 | ✅             | ✅     | ✅    | ✅     |
-| RabbitMQ    | if-nodes-connected | per-node       | ❌     | ✅    | ❌     |
+|             | yield         | suspend        | filter | status | cancel | disk-backed |
+|-------------|---------------|----------------|--------|:------:|:------:|:-----------:|
+| ErlangQueue | ✅            | ✅             | ✅*    | ✅    | ✅*    | ❌          |
+| RabbitMQ    | ⚠️<sup>2</sup>| ⚠️<sup>3</sup> | ❌     | ✅    | ❌     | ✅          |
+- * careful with this, it's slow, O(n)
+- <sup>1</sup> the node that calls `async` and the worker node must be in the same distributed erlang cluster
+- <sup>2</sup> no control commands are sent over the queue, you must call `suspend/1` on each node.
 
 
 ## Getting Started
@@ -112,13 +115,13 @@ iex(4)> fn riak -> :sys.get_state(riak) end |> Riak.async(:my_pool) |> Riak.yiel
   :undefined, [], 100}}
 ```
 
-If the queue supports it, Honeydew will send your process the result of the job unless you pass `reply: false` to `async/2`. If you don't pass it, and you never call `yield/1` to read the result, your process' mailbox will fill up.
+If the queue supports it, Honeydew will send your process the result of the job unless you pass `reply: false` to `async/2`. If you don't pass it, and you never call `yield/1` to read the result, your process' mailbox may fill up after multiple calls. Don't do that.
 
 (Ignoring the response of the `:put` above is just used as an exmaple, you probably want to check the return value of a database insert unless you have good reason to ignore it)
 
 ### Remote Queue Example
 
-Say we've got some pretty heavy tasks that we want to distrbute over a farm of background job processing nodes, they're too heavy to process on our client-facing nodes. Let's enqueue them on a remote queue broker, we'll use RabbitMQ, so we're going to need to add some dependencies to our mix.exs:
+Say we've got some pretty heavy tasks that we want to distribute over a farm of background job processing nodes, they're too heavy to process on our client-facing nodes. Let's enqueue them on a remote queue broker, we'll use RabbitMQ, so we're going to need to add some dependencies to our mix.exs:
 
 ```elixir
 {:amqp, ">= 0.1.4"},
@@ -239,7 +242,7 @@ Queues are the most critical location of state in Honeydew, a job will not be re
 
 Honeydew includes a few basic queue modules:
  - A simple local/global FIFO queue implemented with the `:queue` and `Map` modules, this is the default.
- - A stateless RabbitMQ connector. Please note that `call/2` is not supported yet, only fire-and-forget `cast/2`.
+ - A stateless RabbitMQ connector. Please note that `yield/1` is not supported yet.
 
 If you want to implement your own queue, check out the included queues as a guide. Try to keep in mind where exactly your queue state lives, is your queue process(es) where jobs live, or is it a completely stateless connector for some external broker? Or a hybrid? I'm excited to see what you come up with, please open a PR! <3
 
@@ -268,11 +271,10 @@ Honeydew.Supervisor
 
 ### TODO:
 - failover/takeover for global queues
-- `call/2` responses for RabbitMQ?
+- `yield/1` for RabbitMQ?
 - durable local queues using dets?
 - statistics?
 - before/after job callbacks in worker module
-- fix failure modes
 - `await/2` and job cancellation support?
 - `yield_many/2` support?
 - using a global queue, control which node executes a job on-the-fly with a [ParitionDispatcher](https://hexdocs.pm/gen_stage/Experimental.GenStage.PartitionDispatcher.html)?
