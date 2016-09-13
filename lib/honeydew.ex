@@ -74,6 +74,12 @@ defmodule Honeydew do
     |> GenStage.call({:filter, function})
   end
 
+  def cancel(job, pool) do
+    pool
+    |> get_queue
+    |> GenStage.call({:cancel, job})
+  end
+
   # FIXME: remove
   def state(pool) do
     pool

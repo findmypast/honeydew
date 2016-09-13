@@ -57,6 +57,9 @@ defmodule Honeydew.Queue.ErlangQueue do
     handle_cast({:enqueue, job}, %State{private: {pending, Map.delete(in_progress, id)}})
   end
 
+  def handle_cast(:suspend, state), do: {:noreply, [], state}
+  def handle_cast(:resume, state), do: {:noreply, [], state}
+
   def handle_call({:filter, function}, _from, %State{private: {pending, in_progress}} = state) do
     # try to prevent user code crashing the queue
     reply =
@@ -68,6 +71,26 @@ defmodule Honeydew.Queue.ErlangQueue do
           {:error, e}
       end
     {:reply, reply, [], state}
+  end
+
+  def handle_call({:cancel, %Job{from: from}}, _from, %State{private: {pending, in_progress}} = state) do
+    filter =
+      fn
+        %Job{from: from} -> false;
+        _ -> true
+      end
+
+    new_pending = :queue.filter(filter, pending)
+    canceled = :queue.len(pending) > :queue.len(new_pending)
+
+    reply =
+      cond do
+        :queue.len(pending) > :queue.len(new_pending) -> :ok
+        in_progress |> Map.values |> Enum.filter(&(!filter.(&1))) |> Enum.count > 0 -> {:error, :in_progress}
+        true -> nil
+      end
+
+    {:reply, reply, [], %{state | private: {new_pending, in_progress}}}
   end
 
 

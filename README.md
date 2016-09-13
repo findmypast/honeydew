@@ -21,12 +21,13 @@ Honeydew isn't intended as a simple resource pool, the user's code isn't execute
 - Suspend and resume with `Honeydew.suspend/1` and `Honeydew.resume/1`
 - Queue status with `Honeydew.status/1`
 - List jobs with `Honeydew.filter/2`
+- Cancel jobs with `Honeydew.cancel/2`
 
 ### Queue Feature Support
-|             | yield              | suspend/resume | filter | status |
-|-------------|--------------------|----------------|--------|:------:|
-| ErlangQueue | ✅                  | ✅              | ✅      | ✅      |
-| RabbitMQ    | if-nodes-connected | per-node       | ❌      | ✅      |
+|             | yield              | suspend/resume | filter | status | cancel |
+|-------------|--------------------|----------------|--------|:------:|:-------:
+| ErlangQueue | ✅                 | ✅             | ✅     | ✅    | ✅     |
+| RabbitMQ    | if-nodes-connected | per-node       | ❌     | ✅    | ❌     |
 
 
 ## Getting Started
@@ -202,6 +203,11 @@ There's one important caveat that you should note, Honeydew doesn't yet support 
 
 You can suspend a queue (halt the distribution of new jobs to workers), by calling `Honeydew.suspend(:your_pool)`, then resume with `Honeydew.resume(:your_pool)`. Note that this only instructs queues on the local node to stop distributing new jobs, if you're running a `:global` queue, it will suspend the queue on all nodes.
 
+### Cancelling Jobs
+To cancel a job that hasn't yet run, use `Honeydew.cancel/2`. If the job was successfully cancelled before execution, `:ok` will be returned. If the job wasn't present in the queue, `nil`. If the job is currently being executed (and the queue module supports this return type), `{:error, :in_progress}`.
+
+Note that this feature may not be supported by the queue module you're using. It's best to write your jobs idepotently, regardless.
+
 ### Pool Options
 
 `Honeydew.child_spec/4`'s last argument is a keyword list of pool options.
@@ -264,8 +270,7 @@ Honeydew.Supervisor
 - failover/takeover for global queues
 - `call/2` responses for RabbitMQ?
 - durable local queues using dets?
-- pause/resume
-- statistics
+- statistics?
 - before/after job callbacks in worker module
 - fix failure modes
 - `await/2` and job cancellation support?
