@@ -45,6 +45,8 @@ end
 
 ### Local Queue Example
 
+![local queue](https://github.com/koudelka/honeydew/blob/gen_stage/doc/local.png)
+
 There's an uncaring firehose of data pointed at us, we need to store it all in our database, Riak.
 
 Let's create a worker module and `use Honeydew`. Honeydew will call our worker's `init/1` and keep the `state` from an `{:ok, state}` return.
@@ -121,6 +123,8 @@ If the queue supports it, Honeydew will send your process the result of the job 
 
 ### Remote Queue Example
 
+![remote queue](https://github.com/koudelka/honeydew/blob/gen_stage/doc/remote.png)
+
 Say we've got some pretty heavy tasks that we want to distribute over a farm of background job processing nodes, they're too heavy to process on our client-facing nodes. Let's enqueue them on a remote queue broker, we'll use RabbitMQ, so we're going to need to add some dependencies to our mix.exs:
 
 ```elixir
@@ -188,6 +192,8 @@ and on our background node, after two seconds, we'll see "I worked really hard f
 At present, the RabbitMQ Queue doesn't support job replies. (that is, unless the requesting and processing nodes are in the same cluster)
 
 ### Distributed Components
+
+![distributed queue](https://github.com/koudelka/honeydew/blob/gen_stage/doc/distributed.png)
 
 In a distributed Erlang scenario, you have the option of distributing Honeydew's various components around different nodes in a cluster. At its heart, Honeydew is simply a collection of queue processes and worker processes (and enqueuing processes, those that call `async/2`). For example:
 
