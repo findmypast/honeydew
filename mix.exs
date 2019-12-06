@@ -7,8 +7,8 @@ defmodule Honeydew.Mixfile do
     [app: :honeydew,
      version: @version,
      elixir: "~> 1.3.0",
-     deps: deps,
-     package: package,
+     deps: deps(),
+     package: package(),
      description: "Job queue + worker pool with permanent workers."]
   end
 
